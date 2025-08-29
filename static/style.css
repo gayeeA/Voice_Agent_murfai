@@ -123,6 +123,18 @@ body {
     animation: pulse 1.5s infinite;
 }
 
+.record-btn:disabled {
+    background: radial-gradient(circle at center, #666, #444);
+    cursor: not-allowed;
+    box-shadow: 0 0 10px rgba(102, 102, 102, 0.5);
+    opacity: 0.7;
+}
+
+.record-btn:disabled:hover {
+    transform: none;
+    background: radial-gradient(circle at center, #666, #444);
+}
+
 @keyframes pulse {
     0% { box-shadow: 0 0 0 0 rgba(255, 20, 80, 0.8); }
     70% { box-shadow: 0 0 0 25px rgba(255, 20, 80, 0); }
@@ -163,6 +175,45 @@ body {
 
 .api-key-container button:hover {
     background: linear-gradient(135deg, #ff1744, #c51162);
+}
+
+/* API Key Popup Styles */
+.api-key-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.api-key-popup .popup-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    max-width: 500px;
+    width: 90%;
+}
+
+.api-key-popup h5 {
+    color: #333;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.api-key-popup .popup-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.api-key-popup .popup-buttons .btn {
+    min-width: 120px;
 }
 
 /* Features & About */

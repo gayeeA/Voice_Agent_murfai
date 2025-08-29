@@ -1,5 +1,45 @@
 // static/script.js
 document.addEventListener("DOMContentLoaded", () => {
+    const recordBtn = document.getElementById("recordBtn");
+    const statusDisplay = document.getElementById("statusDisplay");
+    const chatLog = document.getElementById('chat-log');
+    
+    // Disable microphone button initially
+    recordBtn.disabled = true;
+    statusDisplay.textContent = "Please enter API keys to enable microphone";
+
+    // Function to enable microphone button
+    const enableMicrophone = () => {
+        recordBtn.disabled = false;
+        statusDisplay.textContent = "Ready to chat!";
+    };
+
+    // Function to disable microphone button
+    const disableMicrophone = () => {
+        recordBtn.disabled = true;
+        statusDisplay.textContent = "Please enter API keys to enable microphone";
+    };
+
+    // Check API key status on page load but don't automatically enable
+    // The button stays disabled until API keys are explicitly saved
+    const checkApiKeyStatus = async () => {
+        try {
+            const response = await fetch('/validate_api_keys');
+            const data = await response.json();
+            // We don't enable the microphone here even if keys are valid
+            // because the user might want to enter new keys
+            if (!data.valid) {
+                disableMicrophone();
+            }
+        } catch (error) {
+            console.error("Error checking API key status:", error);
+            disableMicrophone();
+        }
+    };
+
+    // Check API key status when page loads
+    checkApiKeyStatus();
+
     const saveApiKeysButton = document.getElementById("saveApiKeys");
     saveApiKeysButton.addEventListener("click", () => {
         const murfApiKey = document.getElementById("murfApiKey").value;
@@ -7,7 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const geminiApiKey = document.getElementById("geminiApiKey").value;
         const serpApiKey = document.getElementById("serpApiKey").value;
 
-        // Send API keys to the server (you may need to implement the endpoint)
+        // Send API keys to the server
         fetch("/save_api_keys", {
             method: "POST",
             headers: {
@@ -24,18 +64,20 @@ document.addEventListener("DOMContentLoaded", () => {
         .then(data => {
             if (data.success) {
                 alert("API keys saved successfully!");
+                enableMicrophone();
+                // Start recording after enabling microphone for main form
+                startRecording();
             } else {
                 alert("Failed to save API keys.");
+                disableMicrophone();
             }
         })
         .catch(error => {
             console.error("Error saving API keys:", error);
             alert("An error occurred while saving API keys.");
+            disableMicrophone();
         });
     });
-    const recordBtn = document.getElementById("recordBtn");
-    const statusDisplay = document.getElementById("statusDisplay");
-    const chatLog = document.getElementById('chat-log');
 
     let isRecording = false;
     let ws = null;
@@ -84,8 +126,100 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
+    const showApiKeyPopup = () => {
+        const popup = document.createElement('div');
+        popup.className = 'api-key-popup';
+        popup.innerHTML = `
+            <div class="popup-content">
+                <h5>Enter API Keys</h5>
+                <div class="input-group mb-2">
+                    <span class="input-group-text">MURF API Key</span>
+                    <input type="text" id="popupMurfApiKey" class="form-control" placeholder="Enter your API Key" />
+                </div>
+                <div class="input-group mb-2">
+                    <span class="input-group-text">AssemblyAI API Key</span>
+                    <input type="text" id="popupAssemblyAiApiKey" class="form-control" placeholder="Enter your API Key" />
+                </div>
+                <div class="input-group mb-2">
+                    <span class="input-group-text">Gemini API Key</span>
+                    <input type="text" id="popupGeminiApiKey" class="form-control" placeholder="Enter your API Key" />
+                </div>
+                <div class="input-group mb-3">
+                    <span class="input-group-text">SerpAPI Key</span>
+                    <input type="text" id="popupSerpApiKey" class="form-control" placeholder="Enter your API Key" />
+                </div>
+                <div class="popup-buttons">
+                    <button id="validateKeysBtn" class="btn btn-primary">Validate & Save</button>
+                    <button id="cancelPopupBtn" class="btn btn-secondary">Cancel</button>
+                </div>
+                <div id="popupError" class="text-danger mt-2" style="display: none;"></div>
+            </div>
+        `;
+        document.body.appendChild(popup);
+
+        // Add event listeners
+        document.getElementById('validateKeysBtn').addEventListener('click', validateAndSaveKeys);
+        document.getElementById('cancelPopupBtn').addEventListener('click', () => {
+            document.body.removeChild(popup);
+        });
+    };
+
+    const validateAndSaveKeys = async () => {
+        const murfApiKey = document.getElementById('popupMurfApiKey').value;
+        const assemblyAiApiKey = document.getElementById('popupAssemblyAiApiKey').value;
+        const geminiApiKey = document.getElementById('popupGeminiApiKey').value;
+        const serpApiKey = document.getElementById('popupSerpApiKey').value;
+
+        // Basic validation - check if any field is empty
+        if (!murfApiKey || !assemblyAiApiKey || !geminiApiKey || !serpApiKey) {
+            document.getElementById('popupError').textContent = 'Please fill all API key fields';
+            document.getElementById('popupError').style.display = 'block';
+            return;
+        }
+
+        try {
+            const response = await fetch("/save_api_keys", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    murfApiKey,
+                    assemblyAiApiKey,
+                    geminiApiKey,
+                    serpApiKey,
+                }),
+            });
+
+            const data = await response.json();
+            
+            if (data.success) {
+                // Close popup, enable microphone, and start recording
+                document.body.removeChild(document.querySelector('.api-key-popup'));
+                enableMicrophone();
+                startRecording();
+            } else {
+                document.getElementById('popupError').textContent = 'Failed to save API keys. Please recheck the keys.';
+                document.getElementById('popupError').style.display = 'block';
+            }
+        } catch (error) {
+            console.error("Error saving API keys:", error);
+            document.getElementById('popupError').textContent = 'Error saving API keys. Please recheck the keys.';
+            document.getElementById('popupError').style.display = 'block';
+        }
+    };
+
     const startRecording = async () => {
         try {
+            // First check if we have valid API keys by making a quick validation request
+            const validationResponse = await fetch('/validate_api_keys');
+            const validationData = await validationResponse.json();
+            
+            if (!validationData.valid) {
+                showApiKeyPopup();
+                return;
+            }
+
             mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
 
@@ -105,11 +239,18 @@ document.addEventListener("DOMContentLoaded", () => {
             };
 
             const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-            ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+            console.log("Connecting to WebSocket:", wsUrl);
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log("WebSocket connection established");
+            };
 
             ws.onmessage = (event) => {
+                console.log("WebSocket message received:", event.data);
                 const msg = JSON.parse(event.data);
-                if (msg.type === "assistant") { // Changed from "llm" to "assistant"
+                if (msg.type === "assistant") {
                     addOrUpdateMessage(msg.text, "assistant");
                 } else if (msg.type === "final") {
                     addOrUpdateMessage(msg.text, "user");
@@ -118,7 +259,21 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (!isPlaying) {
                         playNextInQueue();
                     }
+                } else if (msg.type === "error") {
+                    console.error("WebSocket error:", msg.message);
+                    alert("Error: " + msg.message);
+                    stopRecording();
                 }
+            };
+
+            ws.onerror = (error) => {
+                console.error("WebSocket error:", error);
+                alert("WebSocket connection error. Please check the console for details.");
+                stopRecording();
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket connection closed");
             };
             isRecording = true;
             recordBtn.classList.add("recording");
@@ -140,9 +295,12 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     recordBtn.addEventListener("click", () => {
+        console.log("Microphone button clicked, isRecording:", isRecording);
         if (isRecording) {
+            console.log("Stopping recording...");
             stopRecording();
         } else {
+            console.log("Starting recording...");
             startRecording();
         }
     });

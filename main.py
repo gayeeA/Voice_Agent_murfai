@@ -27,6 +27,11 @@ async def save_api_keys(request: Request):
         data = await request.json()
         with open("api_keys.json", "w") as f:
             json.dump(data, f)
+        
+        # Reload API keys into config
+        import config
+        config.reload_api_keys()
+        
         return {"success": True}
     except Exception as e:
         logging.error(f"Error saving API keys: {e}")
@@ -37,11 +42,26 @@ async def home(request: Request):
     """Serves the main HTML page."""
     return templates.TemplateResponse("index.html", {"request": request})
 
+@app.get("/validate_api_keys")
+async def validate_api_keys():
+    """Validates if all required API keys are present and returns validation status."""
+    missing_keys = config.validate_api_keys()
+    return {"valid": len(missing_keys) == 0, "missing_keys": missing_keys}
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """Handles WebSocket connection for real-time transcription and voice response."""
     await websocket.accept()
     logging.info("WebSocket client connected.")
+
+    # Check if API keys are valid before proceeding
+    missing_keys = config.validate_api_keys()
+    if missing_keys:
+        error_message = f"API keys missing: {', '.join(missing_keys)}. Please configure API keys first."
+        await websocket.send_json({"type": "error", "message": error_message})
+        await websocket.close()
+        logging.warning(f"WebSocket connection rejected due to missing API keys: {missing_keys}")
+        return
 
     loop = asyncio.get_event_loop()
     chat_history = []
@@ -83,7 +103,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
         except Exception as e:
             logging.error(f"Error in LLM/TTS pipeline: {e}")
-            await websocket.send_json({"type": "llm", "text": "Sorry, I encountered an error."})
+            await websocket.send_json({"type": "error", "message": "Sorry, I encountered an error processing your request."})
 
     def on_final_transcript(text: str):
         logging.info(f"Final transcript received: {text}")
